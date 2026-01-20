@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Captura Avalúos</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f1f5f9;
+  margin: 0;
+  padding: 15px;
+}
+
+h1 {
+  text-align: center;
+}
+
+label {
+  font-weight: bold;
+  margin-top: 12px;
+  display: block;
+}
+
+input, select, button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 5px;
+  font-size: 16px;
+}
+
+button {
+  background: #0f172a;
+  color: white;
+  border: none;
+  margin-top: 15px;
+}
+
+.preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.preview img {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid #cbd5e1;
+}
+</style>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0d6efd">
+
+
+</head>
+
+<body>
+
+<h1>Captura Avalúo</h1>
+
+<label>Código del avalúo</label>
+<input type="text" id="codigo" placeholder="Ej: SOL25293">
+
+<label>Tipo de foto</label>
+<select id="tipoFoto">
+  <option value="">-- Seleccione --</option>
+  <option>FACHADA</option>
+  <option>NOMENCLATURA</option>
+  <option>COSTADO IZQUIERDO</option>
+  <option>COSTADO DERECHO</option>
+  <option>INGRESO VEHICULAR</option>
+  <option>SALIDA VEHICULAR</option>
+  <option>FACHADA TORRE</option>
+  <option>VISTA</option>
+  <option>SALA</option>
+  <option>COMEDOR</option>
+  <option>SALA_COMEDOR</option>
+  <option>COCINA</option>
+  <option>ESTUDIO</option>
+  <option>PATIO</option>
+  <option>ROPAS</option>
+  <option>HABITACION_1</option>
+  <option>HABITACION_2</option>
+  <option>HABITACION_3</option>
+  <option>HABITACION_4</option>
+  <option>HABITACION_5</option>
+  <option>BANO_SOCIAL</option>
+  <option>BANO_PRIVADO</option>
+  <option>BALCON</option>
+  <option>GARAJE</option>
+  <option>ESCALERAS</option>
+  <option>ESCALERAS TORRE</option>
+  <option>MEDIDOR AGUA</option>
+  <option>MEDIDOR ENERGIA</option>
+  <option>MEDIDOR GAS</option>
+  <option>PARQUE INFANTIL</option>
+  <option>SALON SOCIAL</option>
+  <option>GYM</option>
+  <option>SALON DE JUEGOS</option>
+  <option>ZONA VERDE</option>
+  <option>TERRAZA</option>
+  <option>BBQ</option>
+  <option>SQUASH</option>
+  <option>SAUNA</option>
+  <option>JACUZZI</option>
+  <option>JARDIN</option>
+  <option>CHIMENEA</option>
+  <option>CLUB HOUSE</option>
+  <option>PISCINA</option>
+  <option>COWORKING</option>
+  <option>OTRO</option>
+</select>
+
+<input type="text" id="otroTexto" placeholder="Describa la foto" style="display:none">
+
+<label>Fotos</label>
+<input type="file" id="fotos" multiple accept="image/*">
+
+
+<div class="preview" id="preview"></div>
+
+<button onclick="enviar()">Subir fotos</button>
+
+<script>
+const tipoSelect = document.getElementById('tipoFoto');
+const otroInput = document.getElementById('otroTexto');
+const fotosInput = document.getElementById('fotos');
+const preview = document.getElementById('preview');
+
+tipoSelect.addEventListener('change', () => {
+  if (tipoSelect.value === 'OTRO') {
+    otroInput.style.display = 'block';
+  } else {
+    otroInput.style.display = 'none';
+    otroInput.value = '';
+  }
+});
+
+// Vista previa
+fotosInput.addEventListener('change', () => {
+  preview.innerHTML = '';
+  for (const file of fotosInput.files) {
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    preview.appendChild(img);
+  }
+});
+
+function enviar() {
+  const codigo = document.getElementById('codigo').value.trim();
+  let tipo = tipoSelect.value;
+  const otro = otroInput.value.trim();
+  const fotos = fotosInput.files;
+
+  if (!codigo || !tipo || fotos.length === 0) {
+    alert('Complete todos los campos');
+    return;
+  }
+
+  if (tipo === 'OTRO' && !otro) {
+    alert('Describa el tipo de foto');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('codigo', codigo);
+  formData.append('tipo', tipo);
+  if (tipo === 'OTRO') formData.append('otro', otro);
+
+  for (const foto of fotos) {
+    formData.append('fotos', foto);
+  }
+
+  fetch('/upload', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(d => {
+      alert(d.mensaje);
+      fotosInput.value = '';
+      preview.innerHTML = '';
+    })
+    .catch(() => alert('Error al subir'));
+}
+</script>
+
+<script>
+async function crearOptimizada(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+
+      const MAX_WIDTH = 1600;
+      const scale = Math.min(MAX_WIDTH / img.width, 1);
+
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(
+        blob => resolve(blob),
+        'image/jpeg',
+        0.9 // calidad ALTA
+      );
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function enviarFotos() {
+  const codigo = document.getElementById('codigo').value;
+  const tipo = document.getElementById('tipo').value;
+  const otro = document.getElementById('otro')?.value || '';
+  const files = document.getElementById('fotos').files;
+
+  const formData = new FormData();
+  formData.append('codigo', codigo);
+  formData.append('tipo', tipo);
+  formData.append('otro', otro);
+
+  for (const file of files) {
+    formData.append('originals', file);
+    const optimizada = await crearOptimizada(file);
+    formData.append('optimized', optimizada, file.name);
+  }
+
+  await fetch('/upload', {
+    method: 'POST',
+    body: formData
+  });
+
+  alert('Fotos enviadas correctamente');
+}
+</script>
+
+
+</body>
+</html>
