@@ -3,12 +3,29 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
+const cors = require('cors');
 
 const app = express();
+
+// 🔹 NECESARIO para formularios
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.use(express.static('public'));
 
-const upload = multer({ dest: 'uploads/temp/' });
+// 🔹 Asegurar carpetas SIEMPRE (local + Render)
+const baseUpload = path.join(__dirname, 'uploads');
+const tempUpload = path.join(baseUpload, 'temp');
 
+if (!fs.existsSync(tempUpload)) {
+  fs.mkdirSync(tempUpload, { recursive: true });
+}
+
+// 🔹 Multer
+const upload = multer({ dest: tempUpload });
+
+// 🔹 Fecha AAMMDD
 function fechaAAMMDD() {
   const d = new Date();
   return (
@@ -18,60 +35,67 @@ function fechaAAMMDD() {
   );
 }
 
+// 🔹 Normalizar texto
 function normalizar(texto) {
-  return texto.toUpperCase().trim().replace(/\s+/g, '_');
+  return texto
+    .toUpperCase()
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Z0-9_]/g, '');
 }
 
-app.post('/upload', upload.fields([
-  { name: 'originals', maxCount: 50 },
-  { name: 'optimized', maxCount: 50 }
-]), (req, res) => {
+// 🔹 ENDPOINT PRINCIPAL
+app.post('/upload', upload.array('fotos'), (req, res) => {
+  try {
+    const { codigo, tipo, otro } = req.body;
 
-  const { codigo, tipo, otro } = req.body;
-  const nombreTipo = tipo === 'OTRO' ? normalizar(otro) : normalizar(tipo);
+    if (!codigo || !tipo || !req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'Datos incompletos' });
+    }
 
-  if (!codigo || !nombreTipo) {
-    return res.status(400).json({ error: 'Datos incompletos' });
+    const nombreTipo =
+      tipo === 'OTRO' && otro
+        ? normalizar(otro)
+        : normalizar(tipo);
+
+    const carpetaNombre = `${codigo}_${fechaAAMMDD()}`;
+    const carpetaFinal = path.join(baseUpload, carpetaNombre);
+
+    if (!fs.existsSync(carpetaFinal)) {
+      fs.mkdirSync(carpetaFinal, { recursive: true });
+    }
+
+    const existentes = fs
+      .readdirSync(carpetaFinal)
+      .filter(f => f.startsWith(nombreTipo)).length;
+
+    req.files.forEach((file, i) => {
+      const num = String(existentes + i + 1).padStart(2, '0');
+      const nuevoNombre = `${nombreTipo}_${num}.jpg`;
+      fs.renameSync(file.path, path.join(carpetaFinal, nuevoNombre));
+    });
+
+    // 🔹 ZIP (en Render queda temporal, está bien)
+    const zipPath = path.join(baseUpload, `${carpetaNombre}.zip`);
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver('zip');
+
+    archive.pipe(output);
+    archive.directory(carpetaFinal, false);
+    archive.finalize();
+
+    res.json({
+      ok: true,
+      mensaje: `Fotos guardadas correctamente (${req.files.length})`
+    });
+
+  } catch (err) {
+    console.error('ERROR UPLOAD:', err);
+    res.status(500).json({ error: 'Error interno al subir' });
   }
-
-  const base = `${codigo}_${fechaAAMMDD()}`;
-  const basePath = path.join(__dirname, 'uploads', base);
-
-  const origDir = path.join(basePath, 'originals');
-  const optDir = path.join(basePath, 'optimized');
-
-  fs.mkdirSync(origDir, { recursive: true });
-  fs.mkdirSync(optDir, { recursive: true });
-
-  const existentes = fs.readdirSync(optDir)
-    .filter(f => f.startsWith(nombreTipo)).length;
-
-  req.files.optimized.forEach((file, i) => {
-    const num = String(existentes + i + 1).padStart(2, '0');
-    const name = `${nombreTipo}_${num}.jpg`;
-    fs.renameSync(file.path, path.join(optDir, name));
-  });
-
-  req.files.originals.forEach((file, i) => {
-    const num = String(existentes + i + 1).padStart(2, '0');
-    const name = `${nombreTipo}_${num}.jpg`;
-    fs.renameSync(file.path, path.join(origDir, name));
-  });
-
-  const zipDir = 'H:/Mi unidad/AVALUOS_APP/AVALUADOR_ALEX';
-  fs.mkdirSync(zipDir, { recursive: true });
-
-  const zipPath = path.join(zipDir, `${base}.zip`);
-  const output = fs.createWriteStream(zipPath);
-  const archive = archiver('zip');
-
-  archive.pipe(output);
-  archive.directory(optDir, 'FOTOS');
-  archive.finalize();
-
-  res.json({ ok: true });
 });
 
-app.listen(3000, () => {
-  console.log('Servidor activo en http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Servidor activo en puerto ${PORT}`);
 });
