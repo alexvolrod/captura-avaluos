@@ -1,3 +1,41 @@
+require('dotenv').config();
+
+
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'avaluos',
+    allowed_formats: ['jpg', 'jpeg', 'png'],
+    public_id: (req, file) => {
+      return Date.now() + '-' + file.originalname;
+    }
+  }
+});
+
+const upload = multer({ storage });
+
+
+app.post('/upload', upload.array('fotos', 10), (req, res) => {
+  const urls = req.files.map(file => file.path);
+
+  res.json({
+    ok: true,
+    mensaje: `Fotos subidas correctamente (${urls.length})`,
+    fotos: urls
+  });
+});
+
+
+
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
@@ -6,6 +44,10 @@ const archiver = require('archiver');
 const cors = require('cors');
 
 const app = express();
+const path = require('path');
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // 🔹 NECESARIO para formularios
 app.use(cors());
@@ -96,6 +138,6 @@ app.post('/upload', upload.array('fotos'), (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor activo en puerto ${PORT}`);
 });
